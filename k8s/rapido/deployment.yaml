@@ -1,0 +1,62 @@
+# Despliegue rápido, sin construir ni publicar una imagen.
+# Usa la imagen oficial de Python y monta el código desde un ConfigMap:
+#
+#   kubectl create configmap picas-fijas-codigo --from-file=app/
+#   kubectl apply -f k8s/rapido/ -f k8s/service.yaml
+#
+# Funciona porque la app no tiene dependencias: solo biblioteca estándar.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: picas-fijas
+  labels:
+    app: picas-fijas
+spec:
+  # Un solo pod: las partidas viven en la memoria del proceso
+  # (ver la explicación en k8s/deployment.yaml).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: picas-fijas
+  template:
+    metadata:
+      labels:
+        app: picas-fijas
+    spec:
+      containers:
+        - name: picas-fijas
+          image: python:3.13-alpine
+          command: ["python", "/app/server.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: codigo
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: codigo
+          configMap:
+            name: picas-fijas-codigo  # server.py, juego.py e index.html

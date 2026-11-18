@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picas y Fijas</title>
+<style>
+/*
+  El juego original se juega con esfero en una hoja cuadriculada, un dígito
+  por cuadro. La página es esa hoja: cuadrícula, margen rojo y tinta azul.
+  No carga nada externo (ni fuentes ni librerías): es un solo archivo.
+*/
+:root {
+  --mesa: #E3E7EE;          /* fondo alrededor de la hoja */
+  --papel: #FBFCFE;
+  --linea: #DCE8F5;         /* cuadrícula de la hoja */
+  --linea-fuerte: #9DB9DA;  /* bordes de casillas y renglones */
+  --raya: #E59AA3;          /* raya del margen */
+  --tinta: #1B3FA0;         /* esfero azul: lo que escribe el jugador y las acciones */
+  --grafito: #2B2F38;       /* texto */
+  --grafito-suave: #5B6472;
+  --rojo: #C22F3D;          /* esfero rojo: errores y fijas */
+  --resaltador: #FFE566;    /* solo para el turno y el resultado */
+
+  --margen: 2.75rem;
+  --cuadro: 1.5rem;
+  --celda: 2rem;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", "Roboto Mono",
+          Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mesa: #0B0E14;
+    --papel: #141922;
+    --linea: #1E2838;
+    --linea-fuerte: #3A4E6E;
+    --raya: #7A3A44;
+    --tinta: #A9C1FF;
+    --grafito: #E7EAF0;
+    --grafito-suave: #A3ADBD;
+    --rojo: #FF8089;
+    --resaltador: #6B5A00;
+    color-scheme: dark;
+  }
+}
+@media (min-width: 40rem) { :root { --margen: 4rem; } }
+@media (max-width: 22rem) { :root { --celda: 1.75rem; } }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--mesa);
+  color: var(--grafito);
+  font: 1rem/1.5 "Avenir Next", Avenir, "Segoe UI Variable Text", "Segoe UI", "Noto Sans",
+        Ubuntu, Roboto, "Helvetica Neue", sans-serif;
+}
+
+.hoja {
+  --aire: 1rem;
+  max-width: 46rem;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 1.5rem var(--aire) 3rem calc(var(--margen) + var(--aire));
+  border-inline: 1px solid var(--linea-fuerte);
+  background-color: var(--papel);
+  background-image:
+    linear-gradient(to right, transparent calc(var(--margen) - 2px), var(--raya) calc(var(--margen) - 2px),
+                    var(--raya) var(--margen), transparent var(--margen)),
+    linear-gradient(var(--linea) 1px, transparent 1px),
+    linear-gradient(to right, var(--linea) 1px, transparent 1px);
+  background-size: 100% 100%, var(--cuadro) var(--cuadro), var(--cuadro) var(--cuadro);
+}
+@media (min-width: 40rem) { .hoja { --aire: 1.5rem; padding-top: 2.5rem; } }
+
+/* ---------- texto ---------- */
+h1 { margin: 0; font-size: 1.75rem; line-height: 1.2; font-weight: 800; letter-spacing: -0.01em; }
+h2 { margin: 2rem 0 0; font-size: 1.25rem; line-height: 1.3; font-weight: 700; }
+p { margin: 0; }
+.nota { margin-top: .5rem; max-width: 34rem; color: var(--grafito-suave); font-size: .9375rem; }
+.num { font: 700 1.0625em/1 var(--mono); color: var(--tinta); }
+
+.error { margin-top: .5rem; color: var(--rojo); font-weight: 600; }
+.error::before { content: "✗ "; content: "✗ " / ""; }
+.error:empty, .resultado:empty, .resaltado:empty { display: none; }
+.resultado { margin-top: .5rem; font-weight: 600; }
+
+.cabecera {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: .25rem 1.5rem; margin-bottom: 1.25rem;
+}
+#aviso { margin: 0 0 1.25rem; }
+.pie { margin-top: 3rem; color: var(--grafito-suave); font-size: .8125rem; }
+
+/* El número del juego va en el margen de la hoja, como al numerar renglones. */
+.id {
+  position: absolute; right: calc(100% + var(--aire)); width: var(--margen);
+  text-align: center; font-family: var(--mono); font-weight: 700; color: var(--grafito-suave);
+}
+
+/* ---------- campos y botones ---------- */
+label { display: block; margin-bottom: .375rem; font-weight: 600; }
+.fila { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+
+input {
+  min-width: 0; height: 2.75rem; padding: 0 .75rem;
+  font: inherit; color: var(--tinta);
+  background-color: var(--papel);
+  border: 2px solid var(--tinta); border-radius: 3px;
+}
+#nombre { width: 15rem; max-width: 100%; }
+
+/* Campo de número: cada carácter cae en un cuadro. Las cuatro primeras
+   casillas van subrayadas, pero el campo deja escribir de más o letras:
+   quien valida es el servicio, y así se puede probar esa validación. */
+input.casillas {
+  --casilla: 2.5rem;
+  width: calc(var(--casilla) * 6 + 4px);
+  max-width: 100%;
+  height: calc(var(--casilla) + 4px);
+  padding: 0 0 0 calc((var(--casilla) - 1ch) / 2);
+  font: 700 1.5rem/1 var(--mono);
+  letter-spacing: calc(var(--casilla) - 1ch);
+  background-image:
+    linear-gradient(var(--tinta), var(--tinta)),
+    repeating-linear-gradient(to right, transparent 0, transparent calc(var(--casilla) - 1px),
+                              var(--linea-fuerte) calc(var(--casilla) - 1px), var(--linea-fuerte) var(--casilla));
+  background-size: calc(var(--casilla) * 4) 4px, auto;
+  background-position: left bottom, left top;
+  background-repeat: no-repeat, repeat;
+}
+
+button { font: inherit; cursor: pointer; border-radius: 3px; }
+button:disabled { opacity: .5; cursor: default; }
+.primario, .secundario {
+  min-height: 2.75rem; padding: 0 1.125rem; font-weight: 700;
+  border: 2px solid var(--tinta);
+}
+.primario { background: var(--tinta); color: var(--papel); }
+.secundario { background: var(--papel); color: var(--tinta); }
+.enlace {
+  padding: .5rem 0; border: 0; background: none; color: var(--tinta);
+  text-decoration: underline; text-underline-offset: .2em;
+}
+:focus-visible { outline: 3px solid var(--tinta); outline-offset: 2px; }
+
+/* ---------- cómo se juega ---------- */
+.reglas { max-width: 34rem; margin-bottom: 1.75rem; }
+.reglas summary { width: fit-content; padding: .25rem 0; cursor: pointer; font-weight: 600; color: var(--tinta); }
+.reglas > p { margin-top: .5rem; }
+.reglas figure { margin: 1rem 0 0; }
+.reglas figcaption { margin-top: .75rem; color: var(--grafito-suave); font-size: .9375rem; }
+.marca {
+  display: inline-block; width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  font: 700 1.0625rem/calc(1.5rem - 4px) var(--mono); text-align: center; color: var(--tinta);
+}
+.marca.fija { border: 2px solid var(--rojo); }
+.marca.pica { border: 2px dashed var(--tinta); }
+
+/* ---------- tablas de casillas ---------- */
+table.celdas { border-collapse: collapse; }
+.celdas caption { padding-bottom: .375rem; text-align: left; font-weight: 700; }
+.celdas td, .celdas th { height: var(--celda); padding: 0; text-align: center; }
+.celdas td {
+  width: var(--celda);
+  font: 700 1.125rem/1 var(--mono); color: var(--tinta);
+  background: var(--papel); border: 1px solid var(--linea-fuerte);
+}
+.celdas thead th { height: 1.5rem; font-size: .8125rem; font-weight: 600; color: var(--grafito-suave); }
+.celdas tbody th { padding-right: .75rem; text-align: left; font-weight: 600; }
+.celdas td.n { font-weight: 400; color: var(--grafito-suave); }
+.celdas td.r { width: calc(var(--celda) * 1.5); color: var(--grafito); }
+.celdas td.n + td { border-left-width: 2px; }
+.celdas td.r:nth-last-child(2) { border-left: 3px double var(--linea-fuerte); }
+.celdas td.vacio { width: auto; padding: 0 .75rem; font: inherit; font-size: .9375rem; color: var(--grafito-suave); }
+.celdas tr.gano td { background: var(--resaltador); color: var(--grafito); }
+.celdas tr.nuevo td { animation: recien 1.8s ease-out; }
+@keyframes recien { from { background: var(--resaltador); } }
+@media (prefers-reduced-motion: reduce) { .celdas tr.nuevo td { animation: none; } }
+
+/* ---------- lista de juegos ---------- */
+.juegos { margin: .75rem 0 0; padding: 0; list-style: none; }
+.juego {
+  position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 0 1rem; padding: .625rem 0; border-top: 1px solid var(--linea-fuerte);
+}
+.juego:last-child { border-bottom: 1px solid var(--linea-fuerte); }
+.juego .id { top: .625rem; }
+.juego .estado { font-weight: 700; }
+.juego .detalle { grid-column: 1; color: var(--grafito-suave); }
+.juego button { grid-column: 2; grid-row: 1 / span 2; }
+
+/* ---------- un juego ---------- */
+#vista-juego h2 { position: relative; margin-top: .5rem; }
+.fase { margin-top: .375rem; }
+.fase strong { margin-right: .5rem; }
+.resaltado {
+  padding: .1em .35em; border-radius: 2px;
+  font-size: 1.25rem; font-weight: 700;
+  background: var(--resaltador);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+#zona-intento { margin-top: 1.5rem; }
+.tablas { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1.5rem 2.5rem; margin-top: 1.75rem; }
+#juego-numeros { margin-top: 1.25rem; }
+</style>
+</head>
+<body>
+<div class="hoja">
+  <header class="cabecera">
+    <h1>Picas y Fijas</h1>
+    <p id="sesion" hidden>
+      Juegas como <strong id="quien-soy"></strong>.
+      <button type="button" class="enlace" id="salir">Cambiar de jugador</button>
+    </p>
+  </header>
+
+  <p class="error" id="aviso" role="status"></p>
+
+  <details class="reglas" id="reglas" open>
+    <summary>Cómo se juega</summary>
+    <p>Cada jugador escribe un número secreto de cuatro dígitos distintos. Por turnos, cada uno
+      intenta adivinar el número del rival y recibe cuántas fijas y cuántas picas tuvo.
+      Gana quien lo adivine primero.</p>
+    <figure>
+      <table class="celdas">
+        <tbody>
+          <tr><th scope="row">Secreto</th><td>4</td><td>2</td><td>7</td><td>1</td></tr>
+          <tr><th scope="row">Intento</th>
+            <td><span class="marca pica">1</span></td>
+            <td><span class="marca fija">2</span></td>
+            <td>3</td>
+            <td><span class="marca pica">4</span></td></tr>
+        </tbody>
+      </table>
+      <figcaption>
+        La respuesta a ese intento es 1 fija y 2 picas.
+        El <span class="marca fija">2</span> es fija: está en el secreto y en la misma posición.
+        El <span class="marca pica">1</span> y el <span class="marca pica">4</span> son picas:
+        están en el secreto, pero en otra posición.
+      </figcaption>
+    </figure>
+  </details>
+
+  <main>
+    <section id="vista-login">
+      <label for="nombre">Tu nombre</label>
+      <div class="fila">
+        <input id="nombre" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+        <button type="button" class="primario" id="entrar">Entrar</button>
+      </div>
+      <p class="error" id="error-login" role="alert"></p>
+      <p class="nota">Para probar con dos jugadores, abre esta página en dos pestañas y entra
+        con un nombre distinto en cada una.</p>
+    </section>
+
+    <section id="vista-lobby" hidden>
+      <label for="secreto">Tu número secreto</label>
+      <div class="fila">
+        <input id="secreto" class="casillas" type="text" autocomplete="off" spellcheck="false"
+               aria-describedby="ayuda-secreto">
+        <button type="button" class="primario" id="crear">Crear juego</button>
+      </div>
+      <p class="nota" id="ayuda-secreto">Cuatro dígitos distintos. Sirve para crear un juego o para
+        unirte a uno de la lista.</p>
+      <p class="error" id="error-lobby" role="alert"></p>
+
+      <h2>Juegos</h2>
+      <p class="nota" id="sin-juegos">Todavía no hay juegos. Escribe tu número secreto y crea el primero.</p>
+      <ul class="juegos" id="lista"></ul>
+    </section>
+
+    <section id="vista-juego" hidden>
+      <button type="button" class="enlace" id="volver">Volver a los juegos</button>
+      <h2><span class="id" id="juego-id"></span><span id="juego-quienes"></span></h2>
+      <p class="fase" role="status"><strong id="juego-fase"></strong><span class="resaltado" id="juego-estado"></span></p>
+      <p class="nota" id="juego-secreto" hidden></p>
+      <p id="juego-numeros" hidden></p>
+
+      <div id="zona-intento" hidden>
+        <label for="intento">Tu intento</label>
+        <div class="fila">
+          <input id="intento" class="casillas" type="text" autocomplete="off" spellcheck="false">
+          <button type="button" class="primario" id="probar">Probar número</button>
+        </div>
+        <p class="resultado" id="resultado" role="status"></p>
+        <p class="error" id="error-juego" role="alert"></p>
+      </div>
+
+      <div class="tablas" id="tablas"></div>
+    </section>
+  </main>
+
+  <footer class="pie" id="pie"></footer>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Estado del cliente ----------
+// Vive solo en la memoria de la pestaña: cada pestaña es un jugador distinto
+// y el servidor es la única fuente de verdad.
+let yo = null;             // nombre con el que se entró
+let juegoAbierto = null;   // id del juego que se está viendo (null = lista de juegos)
+let ultimoJuego = null;    // último estado recibido del juego abierto
+let ultimaFirma = "";      // para redibujar solo cuando algo cambia
+let intentosVistos = null; // para resaltar los intentos recién llegados
+let secuencia = 0;         // para descartar respuestas viejas del servidor
+let pendientes = 0;        // consultas de refresco que aún no responden
+const misNumeros = {};     // id de juego -> mi número secreto, para recordármelo
+
+const ESTADOS = { por_iniciar: "Por iniciar", en_juego: "En juego", terminado: "Terminado" };
+const $ = (id) => document.getElementById(id);
+
+// ---------- Llamadas a la API ----------
+// Las rutas son relativas para que funcione igual en localhost, por NodePort
+// o detrás del proxy de Killercoda.
+async function api(metodo, ruta, cuerpo) {
+  let respuesta;
+  try {
+    respuesta = await fetch(ruta, {
+      method: metodo,
+      headers: cuerpo ? { "Content-Type": "application/json" } : {},
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    });
+  } catch (e) {
+    throw new Error("No hay conexión con la API del juego. Revisa que el servidor esté corriendo.");
+  }
+  let datos = {};
+  try { datos = await respuesta.json(); } catch (e) { /* respuesta sin JSON */ }
+  if (!respuesta.ok) {
+    const error = new Error(datos.error || "El servidor respondió con el error " + respuesta.status + ".");
+    error.codigo = respuesta.status;
+    throw error;
+  }
+  return datos;
+}
+
+// ---------- Ayudas de pantalla ----------
+function crear(etiqueta, clase, texto) {
+  const elemento = document.createElement(etiqueta);
+  if (clase) elemento.className = clase;
+  if (texto !== undefined) elemento.textContent = texto;  // textContent: nunca HTML del usuario
+  return elemento;
+}
+
+function decir(id, texto) {
+  $(id).textContent = texto || "";
+}
+
+function enfocar(id) {
+  // Solo con ratón o teclado: en un teléfono abriría el teclado sin pedirlo.
+  if (window.matchMedia("(pointer: fine)").matches && !$(id).closest("[hidden]")) $(id).focus();
+}
+
+function nombreDe(jugador) {
+  return jugador === yo ? jugador + " (tú)" : jugador;
+}
+
+function mostrar(vista) {
+  for (const v of ["login", "lobby", "juego"]) $("vista-" + v).hidden = v !== vista;
+  for (const id of ["error-login", "error-lobby", "error-juego", "resultado"]) decir(id, "");
+  $("sesion").hidden = !yo;
+  $("reglas").open = vista === "login";
+  window.scrollTo(0, 0);
+}
+
+async function conBoton(boton, tarea) {
+  boton.disabled = true;  // evita enviar dos veces la misma acción
+  try { await tarea(); } finally { boton.disabled = false; }
+}
+
+function fallo(error, idError) {
+  if (error.codigo === 401 && yo) {
+    // El servidor ya no conoce a este jugador: pasa si el pod se reinició,
+    // porque el estado vive en memoria.
+    const nombre = yo;
+    salir();
+    $("nombre").value = nombre;
+    decir("error-login", "El servidor ya no tiene registrado a " + nombre + " (¿se reinició?). Entra de nuevo.");
+    return;
+  }
+  decir(idError, error.message);
+  $(idError).scrollIntoView({ block: "nearest" });
+}
+
+// ---------- Acciones ----------
+async function entrar() {
+  try {
+    const jugador = await api("POST", "login", { nombre: $("nombre").value });
+    yo = jugador.nombre;
+    decir("quien-soy", yo);
+    $("nombre").value = "";
+    verLista();
+    saludarPod();
+  } catch (error) {
+    decir("error-login", error.message);
+  }
+}
+
+function salir() {
+  yo = null;
+  juegoAbierto = null;
+  secuencia++;
+  mostrar("login");
+  enfocar("nombre");
+}
+
+function verLista() {
+  juegoAbierto = null;
+  ultimaFirma = "";
+  secuencia++;
+  mostrar("lobby");
+  enfocar("secreto");
+  refrescar();
+}
+
+async function crearJuego() {
+  const numero = $("secreto").value;
+  try {
+    const juego = await api("POST", "juego", { nombre: yo, numero: numero });
+    recordarNumero(juego.id, numero);
+    abrir(juego.id, juego);
+  } catch (error) {
+    fallo(error, "error-lobby");
+  }
+}
+
+async function unirme(id) {
+  const numero = $("secreto").value;
+  try {
+    const juego = await api("PUT", "juego/" + id, { nombre: yo, numero: numero });
+    recordarNumero(juego.id, numero);
+    abrir(juego.id, juego);
+  } catch (error) {
+    fallo(error, "error-lobby");
+    enfocar("secreto");
+  }
+}
+
+function recordarNumero(id, numero) {
+  misNumeros[id] = numero.trim();
+  $("secreto").value = "";
+}
+
+async function probar() {
+  try {
+    const r = await api("POST", "juego/" + juegoAbierto + "/jugar", { nombre: yo, numero: $("intento").value });
+    $("intento").value = "";
+    decir("error-juego", "");
+    decir("resultado", r.gano ? "" : "Tu intento " + r.numero + " tuvo " + r.mensaje + ".");
+    await refrescar();
+  } catch (error) {
+    decir("resultado", "");
+    fallo(error, "error-juego");
+  }
+  enfocar("intento");
+}
+
+function abrir(id, juego) {
+  juegoAbierto = id;
+  ultimaFirma = "";
+  ultimoJuego = null;
+  intentosVistos = null;
+  secuencia++;
+  mostrar("juego");
+  decir("juego-id", "#" + id);
+  for (const parte of ["juego-quienes", "juego-fase", "juego-estado"]) decir(parte, "");
+  for (const parte of ["juego-secreto", "juego-numeros", "zona-intento"]) $(parte).hidden = true;
+  $("tablas").replaceChildren();
+  if (juego) pintarJuego(juego); else refrescar();
+  enfocar("intento");
+}
+
+// ---------- Refresco ----------
+// No hay websockets: cada 2 segundos se vuelve a pedir el estado (GET).
+async function refrescar() {
+  if (!yo) return;
+  const esta = ++secuencia;
+  const id = juegoAbierto;
+  pendientes++;
+  try {
+    const datos = await api("GET", id === null ? "juego" : "juego/" + id);
+    if (esta !== secuencia) return;  // llegó tarde: ya hay una petición más nueva
+    if (id === null) pintarLista(datos); else pintarJuego(datos);
+    decir("aviso", "");
+  } catch (error) {
+    if (esta !== secuencia) return;
+    if (error.codigo === 404 && id !== null) {
+      verLista();
+      decir("error-lobby", "El juego " + id + " ya no existe en el servidor.");
+    } else {
+      decir("aviso", error.message);
+    }
+  } finally {
+    pendientes--;
+  }
+}
+
+setInterval(function () {
+  const terminado = juegoAbierto !== null && ultimoJuego && ultimoJuego.estado === "terminado";
+  // Un juego terminado ya no cambia, y si la red va lenta se espera la respuesta anterior.
+  if (!terminado && pendientes === 0) refrescar();
+}, 2000);
+
+// ---------- Lista de juegos ----------
+function pintarLista(juegos) {
+  const firma = JSON.stringify(juegos);
+  if (firma === ultimaFirma) return;
+  ultimaFirma = firma;
+  $("sin-juegos").hidden = juegos.length > 0;
+  $("lista").replaceChildren(...juegos.slice().reverse().map(filaJuego));  // los más nuevos arriba
+}
+
+function filaJuego(juego) {
+  const puedoUnirme = juego.estado === "por_iniciar" && juego.creador !== yo;
+  const boton = crear("button", puedoUnirme ? "primario" : "secundario", puedoUnirme ? "Unirme" : "Ver");
+  boton.type = "button";
+  boton.setAttribute("aria-label", (puedoUnirme ? "Unirme al juego " : "Ver el juego ") + juego.id);
+  boton.addEventListener("click", function () {
+    if (puedoUnirme) conBoton(boton, () => unirme(juego.id)); else abrir(juego.id);
+  });
+
+  const creador = nombreDe(juego.creador);
+  const rival = juego.jugadores[1] && nombreDe(juego.jugadores[1]);
+  let detalle = "Lo creó " + creador + " y espera rival.";
+  if (juego.estado === "en_juego") detalle = "Lo creó " + creador + " y juega contra " + rival + ".";
+  if (juego.estado === "terminado") detalle = "Lo creó " + creador + ", jugó contra " + rival + " y ganó " + nombreDe(juego.ganador) + ".";
+
+  const fila = crear("li", "juego");
+  fila.append(
+    crear("span", "id", "#" + juego.id),
+    crear("span", "estado", ESTADOS[juego.estado]),
+    crear("span", "detalle", detalle),
+    boton
+  );
+  return fila;
+}
+
+// ---------- Un juego ----------
+function pintarJuego(juego) {
+  const firma = JSON.stringify(juego);
+  if (firma === ultimaFirma) return;
+  ultimaFirma = firma;
+  ultimoJuego = juego;
+
+  const participo = juego.jugadores.includes(yo);
+  const rival = juego.jugadores.find((jugador) => jugador !== yo);
+  const dos = juego.jugadores.length === 2;
+
+  decir("juego-id", "#" + juego.id);
+  decir("juego-quienes", dos
+    ? nombreDe(juego.jugadores[0]) + " contra " + nombreDe(juego.jugadores[1])
+    : nombreDe(juego.creador) + " espera rival");
+
+  let estado = "Falta el segundo jugador";
+  if (juego.estado === "en_juego") estado = juego.turno === yo ? "Es tu turno" : "Turno de " + juego.turno;
+  if (juego.estado === "terminado") estado = juego.ganador === yo ? "Ganaste" : "Ganó " + juego.ganador;
+  decir("juego-fase", ESTADOS[juego.estado]);
+  decir("juego-estado", estado);
+
+  // Mi número secreto lo recuerda esta pestaña; el servidor no lo devuelve mientras se juega.
+  const secreto = $("juego-secreto");
+  secreto.hidden = !(participo && misNumeros[juego.id] && juego.estado !== "terminado");
+  secreto.replaceChildren("Tu número secreto es ", crear("span", "num", misNumeros[juego.id]), ".");
+
+  // Al terminar, el servidor revela los dos números.
+  const numeros = $("juego-numeros");
+  numeros.hidden = !juego.numeros;
+  if (juego.numeros) {
+    const [a, b] = juego.jugadores;
+    numeros.replaceChildren(
+      "El número de " + nombreDe(a) + " era ", crear("span", "num", juego.numeros[a]),
+      " y el de " + nombreDe(b) + " era ", crear("span", "num", juego.numeros[b]), "."
+    );
+  }
+
+  // El campo queda activo aunque no sea tu turno: el servicio es quien lo impide.
+  $("zona-intento").hidden = !(participo && juego.estado === "en_juego");
+
+  const desde = intentosVistos;
+  intentosVistos = juego.intentos.length;
+  const orden = participo ? [yo, rival] : juego.jugadores;  // mis intentos primero
+  $("tablas").replaceChildren(...(dos ? orden.map((jugador) => tablaDe(jugador, juego, desde)) : []));
+}
+
+function tablaDe(jugador, juego, desde) {
+  const tabla = crear("table", "celdas");
+  tabla.append(crear("caption", "", jugador === yo ? "Tus intentos" : "Intentos de " + jugador));
+
+  const cabeza = tabla.createTHead().insertRow();
+  for (const [texto, ancho] of [["N.º", 1], ["Número", 4], ["Fijas", 1], ["Picas", 1]]) {
+    const th = crear("th", "", texto);
+    th.scope = "col";
+    th.colSpan = ancho;
+    cabeza.append(th);
+  }
+
+  const cuerpo = tabla.createTBody();
+  let n = 0;
+  juego.intentos.forEach(function (intento, posicion) {
+    if (intento.jugador !== jugador) return;
+    const fila = cuerpo.insertRow();
+    if (intento.fijas === 4) fila.className = "gano";
+    else if (desde !== null && posicion >= desde) fila.className = "nuevo";
+    fila.append(crear("td", "n", ++n));
+    for (const digito of intento.numero) fila.append(crear("td", "", digito));
+    fila.append(crear("td", "r", intento.fijas), crear("td", "r", intento.picas));
+  });
+  if (n === 0) {
+    const vacio = crear("td", "vacio", "Sin intentos todavía");
+    vacio.colSpan = 7;
+    cuerpo.insertRow().append(vacio);
+  }
+  return tabla;
+}
+
+// ---------- Arranque ----------
+async function saludarPod() {
+  try {
+    const salud = await api("GET", "healthz");
+    if (salud.pod) decir("pie", "Atendido por el pod " + salud.pod + ".");
+    decir("aviso", "");
+  } catch (error) {
+    decir("aviso", error.message);
+  }
+}
+
+$("entrar").addEventListener("click", (evento) => conBoton(evento.currentTarget, entrar));
+$("crear").addEventListener("click", (evento) => conBoton(evento.currentTarget, crearJuego));
+$("probar").addEventListener("click", (evento) => conBoton(evento.currentTarget, probar));
+$("salir").addEventListener("click", salir);
+$("volver").addEventListener("click", verLista);
+
+// Enter en un campo equivale a pulsar su botón; al corregir el campo se borra su error.
+for (const [campo, boton, error] of [
+  ["nombre", "entrar", "error-login"], ["secreto", "crear", "error-lobby"], ["intento", "probar", "error-juego"],
+]) {
+  $(campo).addEventListener("keydown", function (evento) {
+    if (evento.key === "Enter" && !evento.isComposing) $(boton).click();
+  });
+  $(campo).addEventListener("input", () => decir(error, ""));
+}
+
+saludarPod();
+enfocar("nombre");
+</script>
+</body>
+</html>

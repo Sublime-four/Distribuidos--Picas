@@ -1,0 +1,9 @@
+# La imagen solo necesita app/
+.git
+.gitignore
+k8s
+tests
+README.md
+docs
+**/__pycache__
+**/*.pyc

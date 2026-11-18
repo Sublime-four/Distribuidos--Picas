@@ -1,0 +1,51 @@
+# Despliegue con imagen propia (la que se construye con el Dockerfile).
+# Antes de aplicar, cambia TU_USUARIO por tu usuario de Docker Hub.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: picas-fijas
+  labels:
+    app: picas-fijas
+spec:
+  # Las partidas viven en la memoria del proceso (el enunciado no pide base de
+  # datos), así que debe haber UN solo pod: con dos réplicas, cada una tendría
+  # sus propios juegos y los jugadores no se encontrarían.
+  replicas: 1
+  strategy:
+    type: Recreate  # al actualizar, primero se detiene el pod viejo: nunca hay dos a la vez
+  selector:
+    matchLabels:
+      app: picas-fijas
+  template:
+    metadata:
+      labels:
+        app: picas-fijas
+    spec:
+      containers:
+        - name: picas-fijas
+          image: docker.io/TU_USUARIO/picas-fijas:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          # El pod solo recibe tráfico cuando /healthz responde...
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          # ...y Kubernetes lo reinicia si deja de responder.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
