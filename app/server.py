@@ -1,18 +1,3 @@
-"""API REST de Picas y Fijas. Solo usa la biblioteca estándar de Python.
-
-    python server.py        # escucha en el puerto 8080 (variable PUERTO)
-
-Rutas:
-    POST /login               registra el nombre del jugador
-    POST /juego               crea un juego
-    GET  /juego               lista los juegos (?estado=por_iniciar|en_juego|terminado)
-    GET  /juego/{id}          estado de un juego
-    PUT  /juego/{id}          unirse a un juego
-    POST /juego/{id}/jugar    enviar un intento
-    GET  /                    front básico para probar
-    GET  /healthz             sonda de salud para Kubernetes
-"""
-
 import json
 import os
 import re
@@ -27,14 +12,10 @@ from juego import ErrorJuego, Partidas
 
 PUERTO = int(os.environ.get("PUERTO", "8080"))
 DIRECTORIO = os.path.dirname(os.path.abspath(__file__))
-MAX_CUERPO = 10_000  # bytes; las peticiones del juego son muy pequeñas
+MAX_CUERPO = 10_000
 
-partidas = Partidas()  # todo el estado del servicio
+partidas = Partidas()
 
-
-# ------------------------------------------------------------ endpoints
-# Cada función recibe los datos de la petición (el JSON del cuerpo en POST
-# y PUT, los parámetros de la URL en GET) y devuelve (código HTTP, respuesta).
 
 def login(datos):
     nombre, es_nuevo = partidas.registrar(datos.get("nombre"))
@@ -73,11 +54,9 @@ RUTAS = [
 ]
 
 
-# ------------------------------------------------------------ capa HTTP
-
 class Manejador(BaseHTTPRequestHandler):
     server_version = "PicasFijas/1.0"
-    timeout = 15  # segundos; corta conexiones que se quedan sin enviar nada
+    timeout = 15
 
     def atender(self):
         try:
@@ -117,7 +96,7 @@ class Manejador(BaseHTTPRequestHandler):
         except ErrorJuego as error:
             self.enviar_json(error.codigo, {"error": error.mensaje})
         except (ConnectionError, socket.timeout):
-            pass  # el cliente cerró la conexión o dejó de enviar: no hay a quién responder
+            pass
         except Exception:
             traceback.print_exc()
             self.enviar_json(500, {"error": "Error interno del servidor."})
@@ -130,7 +109,7 @@ class Manejador(BaseHTTPRequestHandler):
         except ValueError:
             raise ErrorJuego(400, "La cabecera Content-Length no es válida.")
         if largo > MAX_CUERPO:
-            self.rfile.read(min(largo, 1_000_000))  # se descarta, para poder responder limpio
+            self.rfile.read(min(largo, 1_000_000))
             raise ErrorJuego(413, "El cuerpo de la petición es demasiado grande.")
         return self.rfile.read(largo) if largo > 0 else b""
 
@@ -162,14 +141,11 @@ class Manejador(BaseHTTPRequestHandler):
         self.wfile.write(cuerpo)
 
     def log_message(self, formato, *args):
-        # Las sondas de Kubernetes llegan cada pocos segundos: no las registramos.
         if "/healthz" not in getattr(self, "path", ""):
             super().log_message(formato, *args)
 
 
 class Servidor(ThreadingHTTPServer):
-    """Un hilo por petición."""
-
     daemon_threads = True
     request_queue_size = 64
 
@@ -179,7 +155,6 @@ def crear_servidor(puerto=PUERTO):
 
 
 def main():
-    # Kubernetes detiene el pod con SIGTERM: salimos de inmediato y sin error.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     with crear_servidor() as servidor:
         print(f"Picas y Fijas escuchando en http://localhost:{PUERTO}", flush=True)

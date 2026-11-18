@@ -1,8 +1,3 @@
-"""Pruebas de las reglas y del API. Desde la raíz del repositorio:
-
-    python -m unittest discover -s tests -v
-"""
-
 import json
 import os
 import sys
@@ -13,21 +8,21 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "app"))
 
-import server  # noqa: E402
-from juego import ErrorJuego, Partidas, contar, validar_numero  # noqa: E402
+import server
+from juego import ErrorJuego, Partidas, contar, validar_numero
 
 
 class ValidarNumero(unittest.TestCase):
     def test_acepta_cuatro_digitos_distintos(self):
         self.assertEqual(validar_numero("1234"), "1234")
-        self.assertEqual(validar_numero("0123"), "0123")  # conserva el cero inicial
+        self.assertEqual(validar_numero("0123"), "0123")
         self.assertEqual(validar_numero(" 4271 "), "4271")
         self.assertEqual(validar_numero(9876), "9876")
 
     def test_rechaza_entradas_invalidas(self):
         casos = [
-            ("123", "exactamente 4"),      # faltan dígitos
-            ("12345", "exactamente 4"),    # sobran dígitos
+            ("123", "exactamente 4"),
+            ("12345", "exactamente 4"),
             (123, "exactamente 4"),
             ("1123", "repetidos"),
             ("12a4", "solo puede tener dígitos"),
@@ -35,7 +30,7 @@ class ValidarNumero(unittest.TestCase):
             ("12 4", "solo puede tener dígitos"),
             ("-123", "solo puede tener dígitos"),
             ("12.4", "solo puede tener dígitos"),
-            ("１２３４", "solo puede tener dígitos"),  # dígitos Unicode de ancho completo
+            ("１２３４", "solo puede tener dígitos"),
             ("", "vacío"),
             ("   ", "vacío"),
             (None, "Falta"),
@@ -53,7 +48,6 @@ class ValidarNumero(unittest.TestCase):
 
 class Contar(unittest.TestCase):
     def test_ejemplo_del_enunciado(self):
-        # Secreto 4271, intento 1234: una fija (el 2) y dos picas (el 4 y el 1).
         self.assertEqual(contar("4271", "1234"), (1, 2))
 
     def test_otros_casos(self):
@@ -78,7 +72,7 @@ class Partida(unittest.TestCase):
 
     def test_login(self):
         self.assertEqual(self.partidas.registrar("  maria  "), ("maria", True))
-        self.assertEqual(self.partidas.registrar("maria"), ("maria", False))  # repetir no falla
+        self.assertEqual(self.partidas.registrar("maria"), ("maria", False))
         self.error(400, self.partidas.registrar, "")
         self.error(400, self.partidas.registrar, None)
         self.error(400, self.partidas.registrar, 42)
@@ -91,28 +85,23 @@ class Partida(unittest.TestCase):
         self.assertIsNone(juego["turno"])
 
         juego = self.partidas.unirse(juego["id"], "luis", "0593")
-        self.assertEqual(juego["estado"], "en_juego")  # con el segundo jugador, inicia
+        self.assertEqual(juego["estado"], "en_juego")
         self.assertEqual(juego["jugadores"], ["ana", "luis"])
         primero = juego["turno"]
         segundo = "luis" if primero == "ana" else "ana"
         secreto = {"ana": "4271", "luis": "0593"}
 
-        # Quien no tiene el turno no puede jugar.
         self.assertIn(primero, self.error(409, self.partidas.jugar, 1, segundo, "1234"))
 
-        # Un intento fallido responde picas y fijas y pasa el turno.
         respuesta = self.partidas.jugar(1, primero, "1234")
         self.assertEqual((respuesta["fijas"], respuesta["picas"]), contar(secreto[segundo], "1234"))
         self.assertFalse(respuesta["gano"])
         self.assertEqual(respuesta["turno"], segundo)
 
-        # No se puede jugar dos veces seguidas.
         self.error(409, self.partidas.jugar, 1, primero, "5678")
 
-        # Mientras se juega, los números secretos no se muestran.
         self.assertNotIn("numeros", self.partidas.ver(1))
 
-        # El otro jugador adivina y gana.
         respuesta = self.partidas.jugar(1, segundo, secreto[primero])
         self.assertTrue(respuesta["gano"])
         self.assertEqual(respuesta["fijas"], 4)
@@ -125,25 +114,24 @@ class Partida(unittest.TestCase):
         self.assertEqual(final["numeros"], secreto)
         self.assertEqual(len(final["intentos"]), 2)
 
-        # Terminado el juego ya no se reciben intentos.
         self.error(409, self.partidas.jugar, 1, primero, "5678")
 
     def test_reglas_de_acceso(self):
-        self.error(401, self.partidas.crear, "nadie", "1234")       # sin login
-        self.error(400, self.partidas.crear, "ana", "1123")         # número inválido
+        self.error(401, self.partidas.crear, "nadie", "1234")
+        self.error(400, self.partidas.crear, "ana", "1123")
         self.partidas.crear("ana", "1234")
         self.error(404, self.partidas.ver, 99)
         self.error(404, self.partidas.unirse, 99, "luis", "5678")
-        self.error(409, self.partidas.jugar, 1, "ana", "5678")      # aún no inicia
-        self.error(409, self.partidas.unirse, 1, "ana", "5678")     # a su propio juego
+        self.error(409, self.partidas.jugar, 1, "ana", "5678")
+        self.error(409, self.partidas.unirse, 1, "ana", "5678")
         self.error(400, self.partidas.unirse, 1, "luis", "56x8")
         self.partidas.unirse(1, "luis", "5678")
         self.partidas.registrar("maria")
-        self.error(409, self.partidas.unirse, 1, "maria", "9012")   # ya hay dos jugadores
-        self.error(403, self.partidas.jugar, 1, "maria", "9012")    # no participa
+        self.error(409, self.partidas.unirse, 1, "maria", "9012")
+        self.error(403, self.partidas.jugar, 1, "maria", "9012")
         turno = self.partidas.ver(1)["turno"]
-        self.error(400, self.partidas.jugar, 1, turno, "99")        # intento inválido
-        self.assertEqual(self.partidas.ver(1)["turno"], turno)      # y no pierde el turno
+        self.error(400, self.partidas.jugar, 1, turno, "99")
+        self.assertEqual(self.partidas.ver(1)["turno"], turno)
 
     def test_el_primer_turno_es_aleatorio(self):
         primeros = set()
@@ -166,12 +154,10 @@ class Partida(unittest.TestCase):
 
 
 class Api(unittest.TestCase):
-    """Las mismas reglas, pero pasando por HTTP y JSON."""
-
     @classmethod
     def setUpClass(cls):
-        server.Manejador.log_message = lambda *args: None  # sin registro de accesos en las pruebas
-        cls.servidor = server.crear_servidor(0)  # puerto libre cualquiera
+        server.Manejador.log_message = lambda *args: None
+        cls.servidor = server.crear_servidor(0)
         cls.base = f"http://127.0.0.1:{cls.servidor.server_address[1]}"
         threading.Thread(target=cls.servidor.serve_forever, daemon=True).start()
 
@@ -181,7 +167,7 @@ class Api(unittest.TestCase):
         cls.servidor.server_close()
 
     def setUp(self):
-        server.partidas = Partidas()  # cada prueba empieza sin juegos
+        server.partidas = Partidas()
 
     def pedir(self, metodo, ruta, cuerpo=None, crudo=None):
         datos = crudo if crudo is not None else (json.dumps(cuerpo).encode() if cuerpo is not None else None)
@@ -230,7 +216,7 @@ class Api(unittest.TestCase):
         codigo, juego, _ = self.pedir("GET", "/juego/1")
         self.assertEqual((codigo, juego["estado"], juego["ganador"]), (200, "terminado", segundo))
 
-        codigo, lista, _ = self.pedir("GET", "/juego/")  # la barra final también sirve
+        codigo, lista, _ = self.pedir("GET", "/juego/")
         self.assertEqual((codigo, lista[0]["ganador"]), (200, segundo))
 
     def test_errores_http(self):
@@ -254,7 +240,7 @@ class Api(unittest.TestCase):
             with self.subTest(metodo=metodo, ruta=ruta, cuerpo=cuerpo or crudo):
                 codigo, respuesta, cabeceras = self.pedir(metodo, ruta, cuerpo, crudo)
                 self.assertEqual(codigo, esperado)
-                self.assertIn("error", respuesta)  # los errores también son JSON
+                self.assertIn("error", respuesta)
                 if codigo == 405:
                     self.assertTrue(cabeceras["Allow"])
 

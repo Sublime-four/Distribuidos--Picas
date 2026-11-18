@@ -5,22 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Picas y Fijas</title>
 <style>
-/*
-  El juego original se juega con esfero en una hoja cuadriculada, un dígito
-  por cuadro. La página es esa hoja: cuadrícula, margen rojo y tinta azul.
-  No carga nada externo (ni fuentes ni librerías): es un solo archivo.
-*/
 :root {
-  --mesa: #E3E7EE;          /* fondo alrededor de la hoja */
+  --mesa: #E3E7EE;
   --papel: #FBFCFE;
-  --linea: #DCE8F5;         /* cuadrícula de la hoja */
-  --linea-fuerte: #9DB9DA;  /* bordes de casillas y renglones */
-  --raya: #E59AA3;          /* raya del margen */
-  --tinta: #1B3FA0;         /* esfero azul: lo que escribe el jugador y las acciones */
-  --grafito: #2B2F38;       /* texto */
+  --linea: #DCE8F5;
+  --linea-fuerte: #9DB9DA;
+  --raya: #E59AA3;
+  --tinta: #1B3FA0;
+  --grafito: #2B2F38;
   --grafito-suave: #5B6472;
-  --rojo: #C22F3D;          /* esfero rojo: errores y fijas */
-  --resaltador: #FFE566;    /* solo para el turno y el resultado */
+  --rojo: #C22F3D;
+  --resaltador: #FFE566;
 
   --margen: 2.75rem;
   --cuadro: 1.5rem;
@@ -76,7 +71,6 @@ body {
 }
 @media (min-width: 40rem) { .hoja { --aire: 1.5rem; padding-top: 2.5rem; } }
 
-/* ---------- texto ---------- */
 h1 { margin: 0; font-size: 1.75rem; line-height: 1.2; font-weight: 800; letter-spacing: -0.01em; }
 h2 { margin: 2rem 0 0; font-size: 1.25rem; line-height: 1.3; font-weight: 700; }
 p { margin: 0; }
@@ -95,13 +89,11 @@ p { margin: 0; }
 #aviso { margin: 0 0 1.25rem; }
 .pie { margin-top: 3rem; color: var(--grafito-suave); font-size: .8125rem; }
 
-/* El número del juego va en el margen de la hoja, como al numerar renglones. */
 .id {
   position: absolute; right: calc(100% + var(--aire)); width: var(--margen);
   text-align: center; font-family: var(--mono); font-weight: 700; color: var(--grafito-suave);
 }
 
-/* ---------- campos y botones ---------- */
 label { display: block; margin-bottom: .375rem; font-weight: 600; }
 .fila { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
 
@@ -113,9 +105,6 @@ input {
 }
 #nombre { width: 15rem; max-width: 100%; }
 
-/* Campo de número: cada carácter cae en un cuadro. Las cuatro primeras
-   casillas van subrayadas, pero el campo deja escribir de más o letras:
-   quien valida es el servicio, y así se puede probar esa validación. */
 input.casillas {
   --casilla: 2.5rem;
   width: calc(var(--casilla) * 6 + 4px);
@@ -147,7 +136,6 @@ button:disabled { opacity: .5; cursor: default; }
 }
 :focus-visible { outline: 3px solid var(--tinta); outline-offset: 2px; }
 
-/* ---------- cómo se juega ---------- */
 .reglas { max-width: 34rem; margin-bottom: 1.75rem; }
 .reglas summary { width: fit-content; padding: .25rem 0; cursor: pointer; font-weight: 600; color: var(--tinta); }
 .reglas > p { margin-top: .5rem; }
@@ -160,7 +148,6 @@ button:disabled { opacity: .5; cursor: default; }
 .marca.fija { border: 2px solid var(--rojo); }
 .marca.pica { border: 2px dashed var(--tinta); }
 
-/* ---------- tablas de casillas ---------- */
 table.celdas { border-collapse: collapse; }
 .celdas caption { padding-bottom: .375rem; text-align: left; font-weight: 700; }
 .celdas td, .celdas th { height: var(--celda); padding: 0; text-align: center; }
@@ -181,7 +168,6 @@ table.celdas { border-collapse: collapse; }
 @keyframes recien { from { background: var(--resaltador); } }
 @media (prefers-reduced-motion: reduce) { .celdas tr.nuevo td { animation: none; } }
 
-/* ---------- lista de juegos ---------- */
 .juegos { margin: .75rem 0 0; padding: 0; list-style: none; }
 .juego {
   position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center;
@@ -193,7 +179,6 @@ table.celdas { border-collapse: collapse; }
 .juego .detalle { grid-column: 1; color: var(--grafito-suave); }
 .juego button { grid-column: 2; grid-row: 1 / span 2; }
 
-/* ---------- un juego ---------- */
 #vista-juego h2 { position: relative; margin-top: .5rem; }
 .fase { margin-top: .375rem; }
 .fase strong { margin-right: .5rem; }
@@ -300,24 +285,18 @@ table.celdas { border-collapse: collapse; }
 <script>
 "use strict";
 
-// ---------- Estado del cliente ----------
-// Vive solo en la memoria de la pestaña: cada pestaña es un jugador distinto
-// y el servidor es la única fuente de verdad.
-let yo = null;             // nombre con el que se entró
-let juegoAbierto = null;   // id del juego que se está viendo (null = lista de juegos)
-let ultimoJuego = null;    // último estado recibido del juego abierto
-let ultimaFirma = "";      // para redibujar solo cuando algo cambia
-let intentosVistos = null; // para resaltar los intentos recién llegados
-let secuencia = 0;         // para descartar respuestas viejas del servidor
-let pendientes = 0;        // consultas de refresco que aún no responden
-const misNumeros = {};     // id de juego -> mi número secreto, para recordármelo
+let yo = null;
+let juegoAbierto = null;
+let ultimoJuego = null;
+let ultimaFirma = "";
+let intentosVistos = null;
+let secuencia = 0;
+let pendientes = 0;
+const misNumeros = {};
 
 const ESTADOS = { por_iniciar: "Por iniciar", en_juego: "En juego", terminado: "Terminado" };
 const $ = (id) => document.getElementById(id);
 
-// ---------- Llamadas a la API ----------
-// Las rutas son relativas para que funcione igual en localhost, por NodePort
-// o detrás del proxy de Killercoda.
 async function api(metodo, ruta, cuerpo) {
   let respuesta;
   try {
@@ -330,7 +309,7 @@ async function api(metodo, ruta, cuerpo) {
     throw new Error("No hay conexión con la API del juego. Revisa que el servidor esté corriendo.");
   }
   let datos = {};
-  try { datos = await respuesta.json(); } catch (e) { /* respuesta sin JSON */ }
+  try { datos = await respuesta.json(); } catch (e) {  }
   if (!respuesta.ok) {
     const error = new Error(datos.error || "El servidor respondió con el error " + respuesta.status + ".");
     error.codigo = respuesta.status;
@@ -339,11 +318,10 @@ async function api(metodo, ruta, cuerpo) {
   return datos;
 }
 
-// ---------- Ayudas de pantalla ----------
 function crear(etiqueta, clase, texto) {
   const elemento = document.createElement(etiqueta);
   if (clase) elemento.className = clase;
-  if (texto !== undefined) elemento.textContent = texto;  // textContent: nunca HTML del usuario
+  if (texto !== undefined) elemento.textContent = texto;
   return elemento;
 }
 
@@ -352,7 +330,6 @@ function decir(id, texto) {
 }
 
 function enfocar(id) {
-  // Solo con ratón o teclado: en un teléfono abriría el teclado sin pedirlo.
   if (window.matchMedia("(pointer: fine)").matches && !$(id).closest("[hidden]")) $(id).focus();
 }
 
@@ -369,14 +346,12 @@ function mostrar(vista) {
 }
 
 async function conBoton(boton, tarea) {
-  boton.disabled = true;  // evita enviar dos veces la misma acción
+  boton.disabled = true;
   try { await tarea(); } finally { boton.disabled = false; }
 }
 
 function fallo(error, idError) {
   if (error.codigo === 401 && yo) {
-    // El servidor ya no conoce a este jugador: pasa si el pod se reinició,
-    // porque el estado vive en memoria.
     const nombre = yo;
     salir();
     $("nombre").value = nombre;
@@ -387,7 +362,6 @@ function fallo(error, idError) {
   $(idError).scrollIntoView({ block: "nearest" });
 }
 
-// ---------- Acciones ----------
 async function entrar() {
   try {
     const jugador = await api("POST", "login", { nombre: $("nombre").value });
@@ -475,8 +449,6 @@ function abrir(id, juego) {
   enfocar("intento");
 }
 
-// ---------- Refresco ----------
-// No hay websockets: cada 2 segundos se vuelve a pedir el estado (GET).
 async function refrescar() {
   if (!yo) return;
   const esta = ++secuencia;
@@ -484,7 +456,7 @@ async function refrescar() {
   pendientes++;
   try {
     const datos = await api("GET", id === null ? "juego" : "juego/" + id);
-    if (esta !== secuencia) return;  // llegó tarde: ya hay una petición más nueva
+    if (esta !== secuencia) return;
     if (id === null) pintarLista(datos); else pintarJuego(datos);
     decir("aviso", "");
   } catch (error) {
@@ -502,17 +474,15 @@ async function refrescar() {
 
 setInterval(function () {
   const terminado = juegoAbierto !== null && ultimoJuego && ultimoJuego.estado === "terminado";
-  // Un juego terminado ya no cambia, y si la red va lenta se espera la respuesta anterior.
   if (!terminado && pendientes === 0) refrescar();
 }, 2000);
 
-// ---------- Lista de juegos ----------
 function pintarLista(juegos) {
   const firma = JSON.stringify(juegos);
   if (firma === ultimaFirma) return;
   ultimaFirma = firma;
   $("sin-juegos").hidden = juegos.length > 0;
-  $("lista").replaceChildren(...juegos.slice().reverse().map(filaJuego));  // los más nuevos arriba
+  $("lista").replaceChildren(...juegos.slice().reverse().map(filaJuego));
 }
 
 function filaJuego(juego) {
@@ -540,7 +510,6 @@ function filaJuego(juego) {
   return fila;
 }
 
-// ---------- Un juego ----------
 function pintarJuego(juego) {
   const firma = JSON.stringify(juego);
   if (firma === ultimaFirma) return;
@@ -562,12 +531,10 @@ function pintarJuego(juego) {
   decir("juego-fase", ESTADOS[juego.estado]);
   decir("juego-estado", estado);
 
-  // Mi número secreto lo recuerda esta pestaña; el servidor no lo devuelve mientras se juega.
   const secreto = $("juego-secreto");
   secreto.hidden = !(participo && misNumeros[juego.id] && juego.estado !== "terminado");
   secreto.replaceChildren("Tu número secreto es ", crear("span", "num", misNumeros[juego.id]), ".");
 
-  // Al terminar, el servidor revela los dos números.
   const numeros = $("juego-numeros");
   numeros.hidden = !juego.numeros;
   if (juego.numeros) {
@@ -578,12 +545,11 @@ function pintarJuego(juego) {
     );
   }
 
-  // El campo queda activo aunque no sea tu turno: el servicio es quien lo impide.
   $("zona-intento").hidden = !(participo && juego.estado === "en_juego");
 
   const desde = intentosVistos;
   intentosVistos = juego.intentos.length;
-  const orden = participo ? [yo, rival] : juego.jugadores;  // mis intentos primero
+  const orden = participo ? [yo, rival] : juego.jugadores;
   $("tablas").replaceChildren(...(dos ? orden.map((jugador) => tablaDe(jugador, juego, desde)) : []));
 }
 
@@ -618,7 +584,6 @@ function tablaDe(jugador, juego, desde) {
   return tabla;
 }
 
-// ---------- Arranque ----------
 async function saludarPod() {
   try {
     const salud = await api("GET", "healthz");
@@ -635,7 +600,6 @@ $("probar").addEventListener("click", (evento) => conBoton(evento.currentTarget,
 $("salir").addEventListener("click", salir);
 $("volver").addEventListener("click", verLista);
 
-// Enter en un campo equivale a pulsar su botón; al corregir el campo se borra su error.
 for (const [campo, boton, error] of [
   ["nombre", "entrar", "error-login"], ["secreto", "crear", "error-lobby"], ["intento", "probar", "error-juego"],
 ]) {

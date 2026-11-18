@@ -66,16 +66,24 @@ El Service es de tipo NodePort y publica el puerto **30080** en los nodos.
 
 ### Comandos útiles
 
-```bash
-kubectl get pods,svc -l app=picas-fijas   # qué está corriendo
-kubectl logs -f deployment/picas-fijas    # peticiones que recibe el pod
-kubectl delete pod -l app=picas-fijas     # Kubernetes lo recrea, pero las partidas se pierden
+Ver qué está corriendo, seguir las peticiones que recibe el pod y borrarlo (Kubernetes lo recrea, pero las partidas se pierden):
 
-# Forma rápida: volver a cargar el código después de cambiarlo
+```bash
+kubectl get pods,svc -l app=picas-fijas
+kubectl logs -f deployment/picas-fijas
+kubectl delete pod -l app=picas-fijas
+```
+
+Forma rápida: volver a cargar el código después de cambiarlo:
+
+```bash
 kubectl create configmap picas-fijas-codigo --from-file=app/ --dry-run=client -o yaml | kubectl apply -f -
 kubectl rollout restart deployment/picas-fijas
+```
 
-# Borrar todo
+Borrar todo:
+
+```bash
 kubectl delete deployment,service picas-fijas
 kubectl delete configmap picas-fijas-codigo --ignore-not-found
 ```
@@ -140,23 +148,27 @@ El front no valida a propósito: deja escribir cualquier cosa y también jugar f
 
 ### Una partida completa con curl
 
+En Kubernetes, desde la terminal del clúster, cambia la primera línea por:
+
+```bash
+URL=http://$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'):30080
+```
+
 ```bash
 URL=http://localhost:8080
-# En Kubernetes, desde la terminal del clúster:
-# URL=http://$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'):30080
 J='Content-Type: application/json'
 
 curl -s -X POST $URL/login -H "$J" -d '{"nombre": "ana"}'
 curl -s -X POST $URL/login -H "$J" -d '{"nombre": "luis"}'
 curl -s -X POST $URL/juego -H "$J" -d '{"nombre": "ana", "numero": "4271"}'
 curl -s -X PUT  $URL/juego/1 -H "$J" -d '{"nombre": "luis", "numero": "0593"}'
-curl -s $URL/juego/1    # "turno" dice quién empieza
+curl -s $URL/juego/1
 curl -s -X POST $URL/juego/1/jugar -H "$J" -d '{"nombre": "luis", "numero": "1234"}'
 curl -s -X POST $URL/juego/1/jugar -H "$J" -d '{"nombre": "ana", "numero": "0593"}'
-curl -s $URL/juego      # todos los juegos, con su estado y quién los creó
+curl -s $URL/juego
 ```
 
-Si le toca a `ana` primero, el intento de `luis` responde `409` con `No es tu turno: le toca a ana.`
+`GET /juego/1` dice en `turno` quién empieza, y `GET /juego` lista todos los juegos con su estado y quién los creó. Si le toca a `ana` primero, el intento de `luis` responde `409` con `No es tu turno: le toca a ana.`
 
 ## Cómo está hecho
 
